@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barcode and OCR Scanner</title>
+    <!-- Video.js CSS -->
+    <link href="https://vjs.zencdn.net/7.21.1/video-js.css" rel="stylesheet" />
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="overlay">
+        <video
+            id="video"
+            class="video-js vjs-default-skin"
+            playsinline
+            muted
+            autoplay
+        ></video>
+        <div id="controls">
+            <div class="dropdowns">
+                <select id="cameraSelect"></select>
+                <select id="resolutionSelect"></select>
+                <select id="workerSelect">
+                    <option value="1">1 Worker</option>
+                    <option value="2">2 Workers</option>
+                    <option value="3">3 Workers</option>
+                    <option value="4">4 Workers</option>
+                </select>
+            </div>
+            <div class="preprocessing-options">
+                <label><input type="checkbox" id="grayscale"> Grayscale</label>
+                <label><input type="checkbox" id="threshold"> Threshold</label>
+                <label><input type="checkbox" id="edgeDetection"> Edge Detection</label>
+                <label><input type="checkbox" id="highlight"> Highlight Enhancement</label>
+            </div>
+            <div class="ocr-controls">
+                <label for="confidenceThreshold">OCR Confidence: <span id="confidenceValue">0.5</span></label>
+                <input type="range" id="confidenceThreshold" min="0" max="1" step="0.01" value="0.5">
+            </div>
+        </div>
+        <div id="fpsCounter">FPS: 0</div>
+        <div id="roi"></div>
+        <div id="results">
+            <div id="ocrResult">
+                <h3>OCR Result:</h3>
+                <p id="recognizedText"></p>
+            </div>
+            <div id="barcodeResult">
+                <h3>Barcode Result:</h3>
+                <p id="decodedBarcode"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Errors and Permissions -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span id="closeModal" class="close">&times;</span>
+            <p id="modalMessage"></p>
+        </div>
+    </div>
+
+    <!-- Video.js Library -->
+    <script src="https://vjs.zencdn.net/7.21.1/video.min.js"></script>
+    <!-- OpenCV.js -->
+    <script async src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
+    <!-- Tesseract.js -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+    <!-- Quagga2.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <!-- Custom Script -->
+    <script src="script.js" defer></script>
+</body>
+</html>
