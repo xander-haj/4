@@ -1,76 +1,485 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barcode and OCR Scanner</title>
-    <!-- Video.js CSS -->
-    <link href="https://vjs.zencdn.net/7.21.1/video-js.css" rel="stylesheet" />
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" 
+        content="width=device-width, initial-scale=1.0, 
+                 maximum-scale=1.0, 
+                 user-scalable=no" />
+  <title>OCR Scanner</title>
+
+  <!-- Video.js Styles -->
+  <link rel="stylesheet" href="https://vjs.zencdn.net/7.20.3/video-js.min.css" />
+
+  <!-- Our Custom Styles -->
+  <link rel="stylesheet" href="./styles.css" />
+
+  <!-- React and ReactDOM from CDN -->
+  <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel for in-browser JSX transform (Development Use Only) -->
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+  <!-- Video.js from CDN -->
+  <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
+
+  <!-- OpenCV.js from CDN -->
+  <script src="https://docs.opencv.org/3.4.0/opencv.js"></script>
+
+  <!-- Tesseract.js from CDN -->
+  <script src="https://unpkg.com/tesseract.js@2.1.4/dist/tesseract.min.js"></script>
 </head>
 <body>
-    <div id="overlay">
-        <video
-            id="video"
-            class="video-js vjs-default-skin"
-            playsinline
-            muted
-            autoplay
-        ></video>
-        <div id="controls">
-            <div class="dropdowns">
-                <select id="cameraSelect"></select>
-                <select id="resolutionSelect"></select>
-                <select id="workerSelect">
-                    <option value="1">1 Worker</option>
-                    <option value="2">2 Workers</option>
-                    <option value="3">3 Workers</option>
-                    <option value="4">4 Workers</option>
-                </select>
-            </div>
-            <div class="preprocessing-options">
-                <label><input type="checkbox" id="grayscale"> Grayscale</label>
-                <label><input type="checkbox" id="threshold"> Threshold</label>
-                <label><input type="checkbox" id="edgeDetection"> Edge Detection</label>
-                <label><input type="checkbox" id="highlight"> Highlight Enhancement</label>
-            </div>
-            <div class="ocr-controls">
-                <label for="confidenceThreshold">OCR Confidence: <span id="confidenceValue">0.5</span></label>
-                <input type="range" id="confidenceThreshold" min="0" max="1" step="0.01" value="0.5">
-            </div>
-        </div>
-        <div id="fpsCounter">FPS: 0</div>
-        <div id="roi"></div>
-        <div id="results">
-            <div id="ocrResult">
-                <h3>OCR Result:</h3>
-                <p id="recognizedText"></p>
-            </div>
-            <div id="barcodeResult">
-                <h3>Barcode Result:</h3>
-                <p id="decodedBarcode"></p>
-            </div>
-        </div>
-    </div>
+  <div id="root"></div>
 
-    <!-- Modal for Errors and Permissions -->
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <span id="closeModal" class="close">&times;</span>
-            <p id="modalMessage"></p>
-        </div>
-    </div>
+  <!-- Our React Application -->
+  <script type="text/babel">
+    /********************************************************************
+     * App.js - Main React Application
+     * 
+     * The following code implements:
+     *  1) Camera permission request flow (with page refresh).
+     *  2) Fullscreen video preview using Video.js.
+     *  3) A centered bounding box ROI.
+     *  4) Optional OpenCV preprocessing (grayscale, threshold, edge detection).
+     *  5) Tesseract.js OCR with confidence threshold.
+     *  6) Settings modal with gear icon.
+     *  7) Extracted text modal.
+     *  8) Web workers setting (1-4).
+     *  9) Lazy loading for Tesseract worker.
+     * 
+     ********************************************************************/
 
-    <!-- Video.js Library -->
-    <script src="https://vjs.zencdn.net/7.21.1/video.min.js"></script>
-    <!-- OpenCV.js -->
-    <script async src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
-    <!-- Tesseract.js -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
-    <!-- Quagga2.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-    <!-- Custom Script -->
-    <script src="script.js" defer></script>
+    const { useState, useEffect, useRef } = React;
+
+    // A simple functional component for the gear settings modal
+    function SettingsModal({
+      isOpen,
+      onClose,
+      preprocessingEnabled,
+      setPreprocessingEnabled,
+      grayscaleEnabled,
+      setGrayscaleEnabled,
+      thresholdEnabled,
+      setThresholdEnabled,
+      edgeEnabled,
+      setEdgeEnabled,
+      preprocessingStrength,
+      setPreprocessingStrength,
+      confidenceThreshold,
+      setConfidenceThreshold,
+      workerCount,
+      setWorkerCount,
+    }) {
+      if (!isOpen) return null;
+
+      return (
+        <div className="modal-backdrop">
+          <div className="modal-content">
+            <h2>Settings</h2>
+
+            <div className="settings-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={preprocessingEnabled}
+                  onChange={(e) => setPreprocessingEnabled(e.target.checked)}
+                />
+                Enable Preprocessing
+              </label>
+            </div>
+
+            <div className="settings-group">
+              <label>
+                Grayscale
+                <input
+                  type="checkbox"
+                  checked={grayscaleEnabled}
+                  disabled={!preprocessingEnabled}
+                  onChange={(e) => setGrayscaleEnabled(e.target.checked)}
+                />
+              </label>
+            </div>
+
+            <div className="settings-group">
+              <label>
+                Threshold
+                <input
+                  type="checkbox"
+                  checked={thresholdEnabled}
+                  disabled={!preprocessingEnabled}
+                  onChange={(e) => setThresholdEnabled(e.target.checked)}
+                />
+              </label>
+            </div>
+
+            <div className="settings-group">
+              <label>
+                Edge Detection
+                <input
+                  type="checkbox"
+                  checked={edgeEnabled}
+                  disabled={!preprocessingEnabled}
+                  onChange={(e) => setEdgeEnabled(e.target.checked)}
+                />
+              </label>
+            </div>
+
+            <div className="settings-group">
+              <label>
+                Preprocessing Strength: {preprocessingStrength}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={preprocessingStrength}
+                disabled={!preprocessingEnabled}
+                onChange={(e) => setPreprocessingStrength(Number(e.target.value))}
+              />
+            </div>
+
+            <div className="settings-group">
+              <label>
+                Confidence Threshold: {confidenceThreshold}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={confidenceThreshold}
+                onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
+              />
+            </div>
+
+            <div className="settings-group">
+              <label>
+                Web Workers: {workerCount}
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="4"
+                value={workerCount}
+                onChange={(e) => setWorkerCount(Number(e.target.value))}
+              />
+            </div>
+
+            <button onClick={onClose}>Close</button>
+          </div>
+        </div>
+      );
+    }
+
+    // A simple functional component for the extracted text modal
+    function ExtractedTextModal({ isOpen, onClose, text }) {
+      if (!isOpen) return null;
+
+      return (
+        <div className="modal-backdrop">
+          <div className="modal-content">
+            <h2>Extracted Text</h2>
+            <textarea
+              readOnly
+              value={text}
+              className="extracted-text-area"
+            />
+            <button onClick={onClose}>Close</button>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      /***************************
+       * State and Refs
+       **************************/
+      const [hasPermission, setHasPermission] = useState(false);
+      const [initialized, setInitialized] = useState(false);
+
+      // For controlling modals
+      const [settingsOpen, setSettingsOpen] = useState(false);
+      const [textModalOpen, setTextModalOpen] = useState(false);
+
+      // Preprocessing settings
+      const [preprocessingEnabled, setPreprocessingEnabled] = useState(false);
+      const [grayscaleEnabled, setGrayscaleEnabled] = useState(false);
+      const [thresholdEnabled, setThresholdEnabled] = useState(false);
+      const [edgeEnabled, setEdgeEnabled] = useState(false);
+      const [preprocessingStrength, setPreprocessingStrength] = useState(50);
+
+      // OCR settings
+      const [confidenceThreshold, setConfidenceThreshold] = useState(70);
+      const [workerCount, setWorkerCount] = useState(1);
+
+      // OCR Results
+      const [recognizedText, setRecognizedText] = useState("");
+      const [roiHasText, setRoiHasText] = useState(false);
+
+      // Video and Canvas
+      const videoRef = useRef(null);
+      const canvasRef = useRef(null);
+
+      // We store the Tesseract worker in a ref for lazy initialization
+      const tesseractWorkerRef = useRef(null);
+
+      // Flag to track if we are currently processing an OCR request
+      const [isProcessing, setIsProcessing] = useState(false);
+
+      /***************************
+       * Effects
+       **************************/
+
+      // On first load, check if user has previously granted permissions
+      // or if we need to request camera permission
+      useEffect(() => {
+        const grantedBefore = localStorage.getItem("cameraPermissionGranted");
+        if (grantedBefore === "true") {
+          setHasPermission(true);
+        } else {
+          // Attempt to request permission right away
+          requestCameraPermission().then((granted) => {
+            if (granted) {
+              // Prompt user that the page will refresh
+              alert("Permissions granted! The page will now refresh to initialize the camera.");
+              localStorage.setItem("cameraPermissionGranted", "true");
+              window.location.reload();
+            } else {
+              alert("Camera permission was not granted. Reload or grant to continue.");
+            }
+          });
+        }
+      }, []);
+
+      // Once we have permission, initialize the video stream
+      useEffect(() => {
+        if (hasPermission && !initialized) {
+          initVideoStream();
+        }
+      }, [hasPermission, initialized]);
+
+      // Poll for OCR
+      useEffect(() => {
+        const interval = setInterval(() => {
+          if (initialized && !isProcessing) {
+            captureAndRecognizeFrame();
+          }
+        }, 1000); // Attempt OCR every 1 second
+        return () => clearInterval(interval);
+      }, [initialized, isProcessing, preprocessingEnabled, grayscaleEnabled, thresholdEnabled, edgeEnabled, 
+          preprocessingStrength, confidenceThreshold, workerCount]);
+
+      /***************************
+       * Functions
+       **************************/
+
+      // Prompt user for camera permission
+      const requestCameraPermission = async () => {
+        try {
+          // Just check if we can get the stream
+          await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          return true;
+        } catch (err) {
+          return false;
+        }
+      };
+
+      // Initialize video stream
+      const initVideoStream = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+          setInitialized(true);
+        } catch (err) {
+          console.error("Error initializing video stream:", err);
+        }
+      };
+
+      // Capture the frame from the video within the ROI and run OCR
+      const captureAndRecognizeFrame = async () => {
+        if (!videoRef.current || !canvasRef.current) return;
+
+        setIsProcessing(true);
+
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+
+        // Match canvas size to video
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        canvas.width = vw;
+        canvas.height = vh;
+
+        // Draw the current video frame
+        ctx.drawImage(video, 0, 0, vw, vh);
+
+        // Define bounding box ROI (centered box)
+        const roiWidth = Math.floor(vw * 0.6);
+        const roiHeight = Math.floor(vh * 0.2);
+        const roiX = Math.floor((vw - roiWidth) / 2);
+        const roiY = Math.floor((vh - roiHeight) / 2);
+
+        // Extract ROI image data
+        const roiImageData = ctx.getImageData(roiX, roiY, roiWidth, roiHeight);
+
+        // Optionally preprocess with OpenCV if enabled
+        let preprocessedCanvas = document.createElement("canvas");
+        preprocessedCanvas.width = roiWidth;
+        preprocessedCanvas.height = roiHeight;
+        let preCtx = preprocessedCanvas.getContext("2d");
+        preCtx.putImageData(roiImageData, 0, 0);
+
+        if (preprocessingEnabled) {
+          let mat = cv.imread(preprocessedCanvas);
+
+          // Convert to grayscale
+          if (grayscaleEnabled) {
+            cv.cvtColor(mat, mat, cv.COLOR_RGBA2GRAY, 0);
+          }
+
+          // Threshold
+          if (thresholdEnabled) {
+            // Use the slider as a threshold value approximation or a factor
+            let threshVal = Math.max(0, Math.min(255, Math.floor((preprocessingStrength / 100) * 255)));
+            cv.threshold(mat, mat, threshVal, 255, cv.THRESH_BINARY);
+          }
+
+          // Edge detection (Canny) if enabled
+          if (edgeEnabled) {
+            let lowVal = Math.floor((preprocessingStrength / 100) * 100);
+            let highVal = Math.floor((preprocessingStrength / 100) * 200);
+            cv.Canny(mat, mat, lowVal, highVal);
+          }
+
+          cv.imshow(preprocessedCanvas, mat);
+          mat.delete();
+        }
+
+        // Lazy init the Tesseract worker if not present
+        if (!tesseractWorkerRef.current) {
+          tesseractWorkerRef.current = Tesseract;
+        }
+
+        try {
+          const data = await tesseractWorkerRef.current.recognize(
+            preprocessedCanvas,
+            'eng',
+            {
+              logger: (m) => {
+                // Optionally capture logs
+                // console.log(m);
+              },
+              workerOptions: {
+                // Attempt to set concurrency if supported
+                numWorkers: workerCount
+              }
+            }
+          );
+
+          const { text, confidence } = data.data;
+          if (confidence >= confidenceThreshold) {
+            setRoiHasText(true);
+            setRecognizedText(text);
+          } else {
+            setRoiHasText(false);
+          }
+        } catch (err) {
+          console.error("Error in Tesseract OCR:", err);
+          setRoiHasText(false);
+        }
+
+        setIsProcessing(false);
+      };
+
+      /***************************
+       * Render
+       **************************/
+      // If user hasn't granted permission, just show a message
+      if (!hasPermission) {
+        return (
+          <div className="no-permission">
+            <h1>Waiting for Camera Permission...</h1>
+            <p>Please grant camera permission and refresh.</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="app-container">
+          <div className="video-container">
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="video-element"
+              id="videoElement"
+            ></video>
+
+            {/* The bounding box ROI overlay */}
+            <div
+              className="roi-box"
+              style={{
+                borderColor: roiHasText ? 'green' : 'red',
+              }}
+            ></div>
+          </div>
+
+          {/* Hidden canvas for capturing frames */}
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+          {/* Settings Gear Button */}
+          <button 
+            className="settings-button" 
+            onClick={() => setSettingsOpen(true)}
+          >
+            &#9881;
+          </button>
+
+          {/* Extracted Text Button */}
+          <button 
+            className="extracted-text-button" 
+            onClick={() => setTextModalOpen(true)}
+          >
+            Show Extracted Text
+          </button>
+
+          {/* Settings Modal */}
+          <SettingsModal
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            preprocessingEnabled={preprocessingEnabled}
+            setPreprocessingEnabled={setPreprocessingEnabled}
+            grayscaleEnabled={grayscaleEnabled}
+            setGrayscaleEnabled={setGrayscaleEnabled}
+            thresholdEnabled={thresholdEnabled}
+            setThresholdEnabled={setThresholdEnabled}
+            edgeEnabled={edgeEnabled}
+            setEdgeEnabled={setEdgeEnabled}
+            preprocessingStrength={preprocessingStrength}
+            setPreprocessingStrength={setPreprocessingStrength}
+            confidenceThreshold={confidenceThreshold}
+            setConfidenceThreshold={setConfidenceThreshold}
+            workerCount={workerCount}
+            setWorkerCount={setWorkerCount}
+          />
+
+          {/* Extracted Text Modal */}
+          <ExtractedTextModal
+            isOpen={textModalOpen}
+            onClose={() => setTextModalOpen(false)}
+            text={recognizedText}
+          />
+        </div>
+      );
+    }
+
+    // Render the App into #root
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
 </body>
 </html>
