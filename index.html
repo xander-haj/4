@@ -286,17 +286,33 @@
       };
 
       // Initialize video stream
-      const initVideoStream = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-          setInitialized(true);
-        } catch (err) {
-          console.error("Error initializing video stream:", err);
+      async function initVideoStream() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "environment" }, 
+          audio: false 
+        });
+    
+        if (videoRef.current) {
+          // Initialize a Video.js player
+          playerRef.current = videojs(videoRef.current, {
+            autoplay: true,
+            muted: true,
+            playsinline: true,
+            // additional Video.js config
+          });
+    
+          // Attach MediaStream
+          playerRef.current.src({
+            src: window.URL.createObjectURL(stream),
+            type: 'video/mp4'  // or 'application/x-mpegURL' for HLS if needed
+          });
         }
-      };
+        setInitialized(true);
+      } catch (err) {
+        console.error("Error initializing video stream:", err);
+      }
+    }
 
       // Capture the frame from the video within the ROI and run OCR
       const captureAndRecognizeFrame = async () => {
