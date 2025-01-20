@@ -293,14 +293,9 @@
       // On mount: get available devices, request camera permission
       useEffect(() => {
         const grantedBefore = localStorage.getItem("cameraPermissionGranted");
-      
         if (grantedBefore === "true") {
-          // User already granted before:
           setHasPermission(true);
-          // Now safely enumerate devices
-          enumerateVideoDevices();
         } else {
-          // Prompt for permission first
           requestCameraPermission().then((granted) => {
             if (granted) {
               alert("Permissions granted! The page will now refresh to initialize the camera.");
@@ -313,7 +308,13 @@
         }
       }, []);
       
-      // Moved device enumeration into its own function
+      // 2) Once we have permission, enumerate devices
+      useEffect(() => {
+        if (hasPermission) {
+          enumerateVideoDevices();
+        }
+      }, [hasPermission]);
+      
       function enumerateVideoDevices() {
         navigator.mediaDevices.enumerateDevices()
           .then((deviceInfos) => {
@@ -329,6 +330,13 @@
           })
           .catch((err) => console.error("Error enumerating devices:", err));
       }
+      
+      // 3) Once we have permission, initialize the video stream if not already done
+      useEffect(() => {
+        if (hasPermission && !initialized) {
+          initVideoStream();
+        }
+      }, [hasPermission, initialized]);
 
 
       // Whenever device/resolution changes AND we have permission, re-initialize the stream
