@@ -292,25 +292,15 @@
 
       // On mount: get available devices, request camera permission
       useEffect(() => {
-        navigator.mediaDevices.enumerateDevices()
-          .then((deviceInfos) => {
-            const videoDevices = deviceInfos.filter(d => d.kind === 'videoinput');
-            setDevices(videoDevices);
-
-            // If there's a stored device in localStorage or we can pick first
-            let storedDeviceId = localStorage.getItem("selectedDeviceId") || "";
-            if (storedDeviceId && videoDevices.some(d => d.deviceId === storedDeviceId)) {
-              setSelectedDeviceId(storedDeviceId);
-            } else if (videoDevices.length > 0) {
-              setSelectedDeviceId(videoDevices[0].deviceId);
-            }
-          })
-          .catch((err) => console.error("Error enumerating devices:", err));
-
         const grantedBefore = localStorage.getItem("cameraPermissionGranted");
+      
         if (grantedBefore === "true") {
+          // User already granted before:
           setHasPermission(true);
+          // Now safely enumerate devices
+          enumerateVideoDevices();
         } else {
+          // Prompt for permission first
           requestCameraPermission().then((granted) => {
             if (granted) {
               alert("Permissions granted! The page will now refresh to initialize the camera.");
@@ -322,6 +312,24 @@
           });
         }
       }, []);
+      
+      // Moved device enumeration into its own function
+      function enumerateVideoDevices() {
+        navigator.mediaDevices.enumerateDevices()
+          .then((deviceInfos) => {
+            const videoDevices = deviceInfos.filter(d => d.kind === 'videoinput');
+            setDevices(videoDevices);
+      
+            let storedDeviceId = localStorage.getItem("selectedDeviceId") || "";
+            if (storedDeviceId && videoDevices.some(d => d.deviceId === storedDeviceId)) {
+              setSelectedDeviceId(storedDeviceId);
+            } else if (videoDevices.length > 0) {
+              setSelectedDeviceId(videoDevices[0].deviceId);
+            }
+          })
+          .catch((err) => console.error("Error enumerating devices:", err));
+      }
+
 
       // Whenever device/resolution changes AND we have permission, re-initialize the stream
       useEffect(() => {
